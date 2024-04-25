@@ -18,6 +18,34 @@ set viewingFolder {}
 set searchRoot {}
 
 
+#	o-------------------------------------o
+#	| Reset the app to its default state. |
+#	o-------------------------------------o
+# To be used in situations like, for example, recovering from an error
+
+proc resetAppState {} {
+
+ foreach i [split {
+  tk busy forget .
+  . configure -cursor {}
+  .top.up -state disabled
+  .c delete all
+  .top.title configure -text {}
+  wm title . [tk appname]
+ } \n] {
+  catch {
+   #puts "i: '$i'"
+   eval $i
+  }
+ }
+
+ array unset ::folders
+ array unset ::folderSizeCache
+ set ::searchRoot {}
+ set ::viewingFolder {}
+}
+
+
 #	o---------------------------------------o
 #	| Open files in the system default app. |
 #	o---------------------------------------o
@@ -217,11 +245,21 @@ set menuHelpCmd {
 }
 set refreshMenuCmd {
  if {$::searchRoot ne {}} {
-  set saveCurrentViewingFolder $::viewingFolder
-  array unset ::folders
-  array unset ::folderSizeCache
-  initSession $::searchRoot
-  updateView $saveCurrentViewingFolder
+  if {[catch {
+   set saveCurrentViewingFolder $::viewingFolder
+   array unset ::folders
+   array unset ::folderSizeCache
+   initSession $::searchRoot
+   updateView $saveCurrentViewingFolder
+  } errorInfo] } {
+   if { [string first "no such file or directory" $errorInfo] != -1 } {
+    setStatus "Folder no longer exists"
+   } else {
+    tk_messageBox -title "Error" -message "Error" -detail "Something went wrong when trying to scan '$searchRoot'.\n\nError information:\n$errorInfo"
+    setStatus "An error occured: [lindex [split $errorInfo \n] 0]"
+   }
+   resetAppState
+  }
  }
 }
 set menuQuitCmd {
@@ -656,5 +694,8 @@ if {$startupSearchPath eq {}} {
  #set startupSearchPath [pwd]
  setStatus "Choose 'Scan' from the menu to begin"
 } else {
- initSession $startupSearchPath
+ if {[catch {initSession $startupSearchPath} errorInfo]} {
+  puts [lindex [split $errorInfo \n] 0]
+  exit
+ }
 }
