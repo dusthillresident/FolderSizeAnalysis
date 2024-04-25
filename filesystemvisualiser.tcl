@@ -243,7 +243,7 @@ if {[tk windowingsystem] ne {aqua}} {
  . configure -menu .menubar
 }
 # ===== Middle: Filesystem visualisation canvas =====
-pack [canvas .c -relief sunken -borderwidth 1 -width 1 -height 1] -fill both -expand 1
+pack [canvas .c -relief sunken -borderwidth 1 -width 1 -height 1 -background [lindex [.top configure -background] end] ] -fill both -expand 1
 # ===== Bottom: status & info bar =====
 pack [frame .bottom -relief sunken -borderwidth 1] -fill x
 pack [label .bottom.filler -text { }] -fill x
