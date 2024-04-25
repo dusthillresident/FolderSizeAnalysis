@@ -222,10 +222,12 @@ set menuAboutCmd {
  } \n]
 }
 set menuOpenCmd {
- set dirMsg {-message {Choose a folder to analyse.}}
- set path [eval tk_chooseDirectory -mustexist 1 -parent . -title \{Scan folder\} [lindex [list {} $dirMsg] [expr {[tk windowingsystem] eq {aqua}}]]]
- if {$path ne {}} {
-  initSession $path
+ if {!$NO_DONT_DO_IT} {
+  set dirMsg {-message {Choose a folder to analyse.}}
+  set path [eval tk_chooseDirectory -mustexist 1 -parent . -title \{Scan folder\} [lindex [list {} $dirMsg] [expr {[tk windowingsystem] eq {aqua}}]]]
+  if {$path ne {}} {
+   initSession $path
+  }
  }
 }
 set menuHelpCmd {
@@ -244,7 +246,7 @@ set menuHelpCmd {
   } \n]
 }
 set refreshMenuCmd {
- if {$::searchRoot ne {}} {
+ if {$::searchRoot ne {} && !$NO_DONT_DO_IT} {
   if {[catch {
    set saveCurrentViewingFolder $::viewingFolder
    array unset ::folders
@@ -292,7 +294,7 @@ if {[tk windowingsystem] eq {aqua}} {
  . configure -menu .menubar
 }
 # ===== Middle: Filesystem visualisation canvas =====
-pack [canvas .c -relief sunken -borderwidth 1 -width 1 -height 1 -background [lindex [.top configure -background] end] ] -fill both -expand 1
+pack [canvas .c -borderwidth 0 -width 1 -height 1 -background [lindex [.top configure -background] end] ] -fill both -expand 1
 # ===== Bottom: status & info bar =====
 pack [frame .bottom -relief sunken -borderwidth 1] -fill x
 pack [label .bottom.filler -text { }] -fill x
