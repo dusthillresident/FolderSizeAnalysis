@@ -16,6 +16,8 @@ bind .destroyNotifier <Destroy> {
 set viewingFolder {}
 # The root level of the directory structure that's been analysed in the current session
 set searchRoot {}
+# For development use
+set DEBUG 0
 
 
 #	o-------------------------------------o
@@ -32,6 +34,7 @@ proc resetAppState {} {
   .c delete all
   .top.title configure -text {}
   wm title . [tk appname]
+  set ::NO_DONT_DO_IT 0
  } \n] {
   catch {
    #puts "i: '$i'"
@@ -43,6 +46,16 @@ proc resetAppState {} {
  array unset ::folderSizeCache
  set ::searchRoot {}
  set ::viewingFolder {}
+}
+
+
+#	o------------------------------o
+#	| Report an error to the user. |
+#	o------------------------------o
+proc reportError {errorInfo} {
+ if {!$::DEBUG} {set errorInfo [lindex [split $errorInfo \n] 0]}
+ tk_messageBox -title "Error" -message "Error" -detail "Something went wrong when trying to scan '$::searchRoot'.\n\nError information:\n$errorInfo"
+ setStatus "An error occured: $errorInfo"
 }
 
 
@@ -226,7 +239,10 @@ set menuOpenCmd {
   set dirMsg {-message {Choose a folder to analyse.}}
   set path [eval tk_chooseDirectory -mustexist 1 -parent . -title \{Scan folder\} [lindex [list {} $dirMsg] [expr {[tk windowingsystem] eq {aqua}}]]]
   if {$path ne {}} {
-   initSession $path
+   if {[catch {initSession $path} errorInfo ]} {
+    reportError $errorInfo
+    resetAppState
+   }
   }
  }
 }
@@ -257,8 +273,7 @@ set refreshMenuCmd {
    if { [string first "no such file or directory" $errorInfo] != -1 } {
     setStatus "Folder no longer exists"
    } else {
-    tk_messageBox -title "Error" -message "Error" -detail "Something went wrong when trying to scan '$searchRoot'.\n\nError information:\n$errorInfo"
-    setStatus "An error occured: [lindex [split $errorInfo \n] 0]"
+    reportError $errorInfo
    }
    resetAppState
   }
