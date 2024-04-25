@@ -213,7 +213,16 @@ set menuHelpCmd {
   {For file items:}
   {  Left click:}
   {    opens the file in the system default app.}
+  {}
+  {If you make changes to the folder you're searching while the app is still running, you should select 'Refresh' from the menu.}
   } \n]
+}
+set refreshMenuCmd {
+ set saveCurrentViewingFolder $::viewingFolder
+ array unset ::folders
+ array unset ::folderSizeCache
+ initSession $::searchRoot
+ updateView $saveCurrentViewingFolder
 }
 set menuQuitCmd {
  exit; # Although all this does is exit, a future version might want to do more than just that, so I defined it like this just in case
@@ -222,6 +231,7 @@ set menuQuitCmd {
 if {[tk windowingsystem] ne {aqua}} {
  menu .top.menu.m -tearoff 0
  .top.menu.m add command -label "Scan folder..." -command $menuOpenCmd
+ .top.menu.m add command -label "Refresh" -command $refreshMenuCmd
  .top.menu.m add command -label "Help..." -command $menuHelpCmd
  .top.menu.m add command -label "About..." -command $menuAboutCmd
  .top.menu.m add command -label "Quit" -command $menuQuitCmd
@@ -237,6 +247,7 @@ if {[tk windowingsystem] ne {aqua}} {
  # File menu
  menu .menubar.file
  .menubar.file add command -label "Scan folder..." -command $menuOpenCmd
+ .menubar.file add command -label "Refresh" -command $refreshMenuCmd
  .menubar add cascade -label [tk appname] -menu .menubar.apple
  .menubar add cascade -label "File" -menu .menubar.file
  # Install menu as menubar
@@ -401,7 +412,6 @@ proc boxArea {x y w h item} {
 
 # Redraw function for "Boxes" drawing mode, called by updateView
 proc "Boxes" {} {
- #.c create oval 10 10 60 60 -outline white -fill red -width 1
  upvar 1 folderContents folderContents
  set thisBox [boxArea 3 3 [expr [winfo width .c]-6] [expr [winfo height .c]-6] [list 1 $::viewingFolder [getFileSize $::viewingFolder]] ]
  .c itemconfigure $thisBox -outline black -fill black -activeoutline white -activefill grey
@@ -586,7 +596,7 @@ proc initSession {path} {
    updateView $searchRoot
   }
  }] 0]
- puts [expr $timeTaken/1000000.0]
+ #puts "Completed in [expr $timeTaken/1000000.0] seconds"
  wm title . "Folder size analysis: [lindex [file split $path] end]"
  . configure -cursor {}; update
 }
