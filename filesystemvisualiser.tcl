@@ -216,11 +216,13 @@ set menuHelpCmd {
   } \n]
 }
 set refreshMenuCmd {
- set saveCurrentViewingFolder $::viewingFolder
- array unset ::folders
- array unset ::folderSizeCache
- initSession $::searchRoot
- updateView $saveCurrentViewingFolder
+ if {$::searchRoot ne {}} {
+  set saveCurrentViewingFolder $::viewingFolder
+  array unset ::folders
+  array unset ::folderSizeCache
+  initSession $::searchRoot
+  updateView $saveCurrentViewingFolder
+ }
 }
 set menuQuitCmd {
  exit; # Although all this does is exit, a future version might want to do more than just that, so I defined it like this just in case
