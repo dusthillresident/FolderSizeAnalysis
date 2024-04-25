@@ -175,9 +175,7 @@ label .top.title -font {Sans 14}
  }
 }
 # Menu button
-if {[tk windowingsystem] ne {aqua}} {
- menubutton .top.menu -text [encoding convertfrom utf-8 [binary format H* E298B0]] -padx 2 -pady 2 -font {{sans} 14 bold} -borderwidth 1 -relief raised
-}
+menubutton .top.menu -text [encoding convertfrom utf-8 [binary format H* E298B0]] -padx 2 -pady 2 -font {{sans} 14 bold} -borderwidth 1 -relief raised
 # Configure the items in the top bar with 'grid
 grid {*}[winfo children .top]
 grid columnconfigure .top 2 -weight 1
@@ -228,15 +226,15 @@ set menuQuitCmd {
  exit; # Although all this does is exit, a future version might want to do more than just that, so I defined it like this just in case
 }
 # Create the menu
-if {[tk windowingsystem] ne {aqua}} {
- menu .top.menu.m -tearoff 0
- .top.menu.m add command -label "Scan folder..." -command $menuOpenCmd
- .top.menu.m add command -label "Refresh" -command $refreshMenuCmd
- .top.menu.m add command -label "Help..." -command $menuHelpCmd
- .top.menu.m add command -label "About..." -command $menuAboutCmd
- .top.menu.m add command -label "Quit" -command $menuQuitCmd
- .top.menu configure -menu .top.menu.m
-} else {
+menu .top.menu.m -tearoff 0
+.top.menu.m add command -label "Scan folder..." -command $menuOpenCmd
+.top.menu.m add command -label "Refresh" -command $refreshMenuCmd
+.top.menu.m add command -label "Help..." -command $menuHelpCmd
+.top.menu.m add command -label "About..." -command $menuAboutCmd
+.top.menu.m add command -label "Quit" -command $menuQuitCmd
+.top.menu configure -menu .top.menu.m
+# Configure the special menubar for Mac OS
+if {[tk windowingsystem] eq {aqua}} {
  # Create menu for menubar
  menu .menubar
  # App menu
