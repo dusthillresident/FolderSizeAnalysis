@@ -14,9 +14,14 @@ bind .destroyNotifier <Destroy> {
  exit
 }
 
-# The folder that is currently being viewed
+
+#	o-----------------------o
+#	| Key global variables. |
+#	o-----------------------o
+
+# Path of the folder that is currently being viewed.
 set viewingFolder {}
-# The root level of the directory structure that's been analysed in the current session
+# Path of the root level of the directory structure that's been analysed in the current session.
 set searchRoot {}
 # The current viewing mode.
 # This variable is used both to display the name of the current viewing mode in the viewMode option menu,
