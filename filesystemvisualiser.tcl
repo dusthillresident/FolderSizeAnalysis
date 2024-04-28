@@ -6,7 +6,9 @@
 package require Tk
 tk appname {Folder Size Analysis}
 wm geometry . 400x400
-# This makes sure that the 'X' close button instantly quits the program
+# This makes sure that the 'X' close button instantly quits the program.
+# I experienced some issues with this binding being fired twice when I bound it to '.'
+# which is why I create a dummy widget to bind it to instead.
 label .destroyNotifier
 bind .destroyNotifier <Destroy> {
  exit
@@ -16,7 +18,15 @@ bind .destroyNotifier <Destroy> {
 set viewingFolder {}
 # The root level of the directory structure that's been analysed in the current session
 set searchRoot {}
-# For development use
+# The current viewing mode.
+# This variable is used both to display the name of the current viewing mode in the viewMode option menu,
+# and to call the corresponding display redraw procedure (the value itself is the name of the procedure)
+# Valid options are "Pie chart" and "Boxes"
+set viewMode "Pie chart"
+# This variable is part of a rubbish failsafe mechanism, an attempt at avoiding a situation where updateView gets called while another instance of updateView is already running.
+# When set to True, various routines and actions are disabled.
+set NO_DONT_DO_IT 0
+# For development use, when set to True, error messages have more information.
 set DEBUG 0
 
 
@@ -106,11 +116,11 @@ proc sizeString {bytes} {
 #	| Get the size of folders and files. |
 #	o------------------------------------o
 
-# Some constants that are used to decide how regularly to update the status bar while scanning.
+# These are some constants that are used to decide how regularly to update the status bar while scanning.
 set ticker -1
-set tickerDivisor 1023
+set tickerDivisor 1023; # Must be a power of 2, minus 1.
 # Tcl seems to run much slower on systems other than linux,
-# so we need to update more often or it might seem to users as if the app has hung up
+# so we need to update more often or it might seem to users as if the app has hung up.
 if {[tk windowingsystem] ne {x11}} {set tickerDivisor 511}
 
 proc getFileSize {path} {
@@ -192,22 +202,20 @@ proc checkFolder {path} {
 #	| Build the user interface. |
 #	o---------------------------o
 
-#  _______________________________
-# |Top: control & navigation bar  |
-# |_______________________________|
-# |Filesystem visualisation canvas|
-# |_______________________________|
-# |Bottom: status & info bar      |
-# |_______________________________|
+#  ___________________________________________________________________
+# |                  Top: control & navigation bar                    |
+# |(Go up) (viewMode menu)   (Title: name of current folder)   (Menu) |
+# |___________________________________________________________________|
+# |             Middle: Filesystem visualisation canvas               |
+# |___________________________________________________________________|
+# |                    Bottom: status & info bar                      |
+# |___________________________________________________________________|
 
 # ===== Top: Control and navigation bar =====
 pack [frame .top -relief raised -borderwidth 1] -fill x
 # The contents of the top bar
+# The "go up" button
 button .top.up -text "Go up" -state disabled
-tk_optionMenu .top.viewmode viewMode {Pie chart} Boxes
-.top.viewmode configure -width 7
-trace add variable viewMode write {apply {{args} {uplevel "#0" $::canvasUpdateScript}}}
-label .top.title -font {Sans 14}
 .top.up configure -command {
  set rootPath [lindex $folders($viewingFolder) 3]
  #puts "rootpath '$rootPath'"
@@ -215,12 +223,32 @@ label .top.title -font {Sans 14}
   updateView $rootPath
  }
 }
-# Menu button
+# The viewMode menu, which sets the current view mode
+tk_optionMenu .top.viewmode viewMode {Pie chart} Boxes
+.top.viewmode configure -width 7
+# When viewMode is changed, we need to update the display.
+trace add variable viewMode write {apply {{args} {uplevel "#0" $::canvasUpdateScript}}}
+# Title: this is used to display the name of the folder currently being viewed in the middle of the top frame.
+label .top.title -font {Sans 14}
+# Menu button, for the main menu.
 menubutton .top.menu -text [encoding convertfrom utf-8 [binary format H* E298B0]] -padx 2 -pady 2 -font {{sans} 14 bold} -borderwidth 1 -relief raised
 # Configure the items in the top bar with 'grid
 grid {*}[winfo children .top]
 grid columnconfigure .top 2 -weight 1
+# ===== Middle: Filesystem visualisation canvas =====
+pack [canvas .c -borderwidth 0 -width 1 -height 1 -background [lindex [.top configure -background] end] ] -fill both -expand 1
+# ===== Bottom: status & info bar =====
+pack [frame .bottom -relief sunken -borderwidth 1] -fill x
+pack [label .bottom.filler -text { }] -fill x
+place [label .bottom.status] -x 4 -y 0
+
+
+#	o----------------------------o
+#	| Configuration of the menu. |
+#	o----------------------------o
+
 # Define the command scripts for the menu options
+# 'About'
 set menuAboutCmd {
  tk_messageBox -title [tk appname] -message "About [tk appname]" -detail [join {
   {Explore your filesystem through a visualisation}
@@ -234,6 +262,7 @@ set menuAboutCmd {
   {dusthillresident@gmail.com}
  } \n]
 }
+# 'Scan folder...'
 set menuOpenCmd {
  if {!$NO_DONT_DO_IT} {
   set dirMsg {-message {Choose a folder to analyse.}}
@@ -246,6 +275,7 @@ set menuOpenCmd {
   }
  }
 }
+# 'Help...'
 set menuHelpCmd {
  tk_messageBox -title "Help info" -message "How to use '[tk appname]'" -detail [join {
   {For folder items:}
@@ -261,13 +291,14 @@ set menuHelpCmd {
   {If you make changes to the folder you're searching while the app is still running, you should select 'Refresh' from the menu.}
   } \n]
 }
+# 'Refresh'
 set refreshMenuCmd {
  if {$::searchRoot ne {} && !$NO_DONT_DO_IT} {
   if {[catch {
+   set saveCurrentSearchRoot $::searchRoot
    set saveCurrentViewingFolder $::viewingFolder
-   array unset ::folders
-   array unset ::folderSizeCache
-   initSession $::searchRoot
+   resetAppState
+   initSession $saveCurrentSearchRoot
    updateView $saveCurrentViewingFolder
   } errorInfo] } {
    if { [string first "no such file or directory" $errorInfo] != -1 } {
@@ -279,8 +310,9 @@ set refreshMenuCmd {
   }
  }
 }
+# 'Quit'
 set menuQuitCmd {
- exit; # Although all this does is exit, a future version might want to do more than just that, so I defined it like this just in case
+ exit; # Although all this does is exit, a future version might want to do more than just that, so I defined it like this just in case.
 }
 # Create the menu
 menu .top.menu.m -tearoff 0
@@ -305,15 +337,9 @@ if {[tk windowingsystem] eq {aqua}} {
  .menubar.file add command -label "Refresh" -command $refreshMenuCmd
  .menubar add cascade -label [tk appname] -menu .menubar.apple
  .menubar add cascade -label "File" -menu .menubar.file
- # Install menu as menubar
+ # Install the menu as menubar
  . configure -menu .menubar
 }
-# ===== Middle: Filesystem visualisation canvas =====
-pack [canvas .c -borderwidth 0 -width 1 -height 1 -background [lindex [.top configure -background] end] ] -fill both -expand 1
-# ===== Bottom: status & info bar =====
-pack [frame .bottom -relief sunken -borderwidth 1] -fill x
-pack [label .bottom.filler -text { }] -fill x
-place [label .bottom.status] -x 4 -y 0
 
 
 #	o-----------------------------------------------------------------------------o
@@ -329,18 +355,19 @@ proc plural {n} {
 #	| Stuff related to rendering the visual display. |
 #	o------------------------------------------------o
 
-# The colours used for visual display
+# The colours used for visual display.
 set itemOutlineColour		"dark gray"
 set itemOutlineColourBright	"white"
 set fileColour			"teal"
 set fileColourBright		"#3E9E9E"
 set folderColour		"blue"
 set folderColourBright		"#3E3EFE"
-set itemColours			[list $fileColour $folderColour]
-set itemColoursBright		[list $fileColourBright $folderColourBright]
 set smallFilesColour		"dark slate gray"
 set smallFilesColourBright	"#627A7A"
 set boxTextColour		"white"
+# Don't edit these, they're lists that are used to conveniently look up the colour values for files/folders
+set itemColours			[list $fileColour $folderColour]
+set itemColoursBright		[list $fileColourBright $folderColourBright]
 
 #	o--------------------------------o
 #	| The 'Boxes' view display mode. |
@@ -357,6 +384,7 @@ proc boxArea {x y w h item} {
  lassign $item thisItemIsAFolder itemPath itemSize
  if {!$itemSize || $w<1 || $h<1} return
  set displayName [lindex [file split $itemPath] end]
+ set widthIsLessThanHeight [expr {$w<$h}]
 
  # Make the rectangle 
  set thisBox [.c create rectangle [expr {$x+1}] [expr {$y+1}] [expr {$x+$w-1}] [expr {$y+$h-1}] \
@@ -375,8 +403,8 @@ proc boxArea {x y w h item} {
    -text $smallDisplayName \
    -fill $::boxTextColour \
    -font {monospace 7} \
-   -width [lindex [list $w $h] [expr {$w<$h}]]\
-   -angle [lindex {0 90} [expr {$w<$h}]]]
+   -width [lindex [list $w $h] $widthIsLessThanHeight]\
+   -angle [lindex {0 90} $widthIsLessThanHeight]]
   # Tcl/Tk canvas seems to center the text at the x;y location we place it at, rather than the x;y location being the top left corner of the first character.
   # In order to place the text relative to the top left corner of the first character, we first place it at x0;y0, and get the bounding box of the text,
   # then we can use the coords of the bottom right corner of the bounding box to undo the centering, and finally move the text to where we want it.
@@ -439,12 +467,12 @@ proc boxArea {x y w h item} {
   }
 
   # Display this item
-  if {$w>$h} {
-   boxArea $x $y [expr {$thisBoxWidth-1}] $h $subItem
-   set x [expr {$x+$thisBoxWidth}]
-  } else {
+  if {$widthIsLessThanHeight} {
    boxArea $x $y $w [expr {$thisBoxWidth-1}] $subItem
    set y [expr {$y+$thisBoxWidth}]
+  } else {
+   boxArea $x $y [expr {$thisBoxWidth-1}] $h $subItem
+   set x [expr {$x+$thisBoxWidth}]
   }  
 
  }
@@ -541,7 +569,7 @@ proc "Pie chart" {} {
   set startAngle [expr {$startAngle + $thisSliceExtent}]
  }
 
- # If there is a smaller files pie slice, display it now
+ # If there is a smaller files pie slice, display it now.
  if {$smallFilesExtent > 0.0} {
 
   set ::smallFilesMessage "[sizeString $smallFilesSize] : $smallFilesNumber smaller files"
@@ -565,9 +593,6 @@ proc "Pie chart" {} {
 #	o--------------------------------------------------------o
 #	| Set the current viewing folder and update the display. |
 #	o--------------------------------------------------------o
-
-# This variable is part of a rubbish failsafe mechanism, an attempt at avoiding a situation where updateView gets called while another instance of updateView is already running.
-set NO_DONT_DO_IT 0
 
 # Update the view, either because the screen needs redrawing or because the user has navigated to view a different folder
 proc updateView {path} {
