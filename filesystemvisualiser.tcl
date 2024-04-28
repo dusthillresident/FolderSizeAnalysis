@@ -559,7 +559,7 @@ proc "Pie chart" {} {
    -activefill [lindex $::itemColoursBright $thisItemIsAFolder] \
    -width 1]
   # Mouse hover binding for pie slices
-  .c bind $thisSliceItem <Enter> [list setStatus [string cat [sizeString $itemSize] { : } [lindex [file split $itemPath] end] ]]
+  .c bind $thisSliceItem <Enter> [list setStatus "[sizeString $itemSize] : [lindex [file split $itemPath] end]"]
   .c bind $thisSliceItem <Leave> {setStatus $::totalSizeMessage}
   # Mouse click binding for pie slices
   if {$thisItemIsAFolder} {
