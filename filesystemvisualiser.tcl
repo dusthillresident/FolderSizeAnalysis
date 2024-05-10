@@ -13,6 +13,11 @@ label .destroyNotifier
 bind .destroyNotifier <Destroy> {
  exit
 }
+# On Mac OS, button #2 is right click. On Linux and Windows, button #3 is right click.
+set rightClick 3
+if {[tk windowingsystem] eq {aqua}} {
+ set rightClick 2
+}
 
 
 #	o-----------------------o
@@ -49,7 +54,6 @@ proc resetAppState {} {
   .c delete all
   .top.title configure -text {}
   wm title . [tk appname]
-  set ::NO_DONT_DO_IT 0
  } \n] {
   catch {
    #puts "i: '$i'"
@@ -59,6 +63,7 @@ proc resetAppState {} {
 
  array unset ::folders
  array unset ::folderSizeCache
+ set ::NO_DONT_DO_IT 0
  set ::searchRoot {}
  set ::viewingFolder {}
 }
@@ -345,6 +350,11 @@ if {[tk windowingsystem] eq {aqua}} {
  # Install the menu as menubar
  . configure -menu .menubar
 }
+# Optimise look on mac OS
+if {[tk windowingsystem] eq {aqua}} {
+ .top configure -borderwidth 0
+ .bottom configure -borderwidth 0
+}
 
 
 #	o-----------------------------------------------------------------------------o
@@ -400,7 +410,7 @@ proc boxArea {x y w h item} {
 
  # Make the text label
  set textLabelItem {}
- if { min($w,$h)>10 && max($w,$h)>40} {
+ if {min($w,$h)>10 && max($w,$h)>40} {
   # Rough/approximate calculation to try to (mostly) keep the label from spilling outside this box
   set nameLengthLimit [expr { int( min( max($w,$h)/6.6, [string length $displayName] ) ) }]
   set smallDisplayName [string range $displayName 0 $nameLengthLimit]
@@ -438,11 +448,11 @@ proc boxArea {x y w h item} {
  # Mouse click binding for folders
  foreach i [join [list $thisBox $textLabelItem]] {
   .c bind $i <ButtonPress-1> [list updateView $itemPath]
-  .c bind $i <ButtonPress-3> [list openFileExternally $itemPath]
+  .c bind $i <ButtonPress-$::rightClick> [list openFileExternally $itemPath]
  }
 
  # Stop here if this rectangle/box is considered too small to display its contents/subitems
- if {$w<25 || $h<25 } {return $thisBox}
+ if {$w<25 || $h<25} {return $thisBox}
 
  # From here, we display the contents of this rectangle.
 
@@ -456,7 +466,7 @@ proc boxArea {x y w h item} {
  set folderData [checkFolder $itemPath]
  lassign $folderData {} folderTotalSize folderContents {} totalItems numFolders numFiles
 
- set wh [expr { max( $w, $h ) }]
+ set wh [expr {max( $w, $h )}]
 
  foreach subItem $folderContents {
 
@@ -543,7 +553,7 @@ proc "Pie chart" {} {
   # Calculate the size of this pie slice
   set thisSliceExtent [expr {$itemSize/double($folderTotalSize)*360.0}]
   # For pie slices that are too small to display, we combine them into a 'smaller files' pie slice which is displayed last
-  if {$thisSliceExtent <= $smallnessThreshold } {
+  if {$thisSliceExtent <= $smallnessThreshold} {
    set smallFilesExtent [expr {$smallFilesExtent + $thisSliceExtent}]
    incr smallFilesSize $itemSize
    incr smallFilesNumber
@@ -566,7 +576,7 @@ proc "Pie chart" {} {
    # Left click to view the analysis of this folder
    .c bind $thisSliceItem <ButtonPress-1> [list updateView $itemPath]
    # Right click to open this folder in the system file manager
-   .c bind $thisSliceItem <ButtonPress-3> [list openFileExternally $itemPath]
+   .c bind $thisSliceItem <ButtonPress-$::rightClick> [list openFileExternally $itemPath]
   } else {
    # Left click to open this file in the system default app
    .c bind $thisSliceItem <ButtonPress-1> [list openFileExternally $itemPath]
