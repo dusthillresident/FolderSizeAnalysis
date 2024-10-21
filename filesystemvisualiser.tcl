@@ -33,12 +33,13 @@ set searchRoot {}
 # and to call the corresponding display redraw procedure (the value itself is the name of the procedure)
 # Valid options are "Pie chart" and "Boxes"
 set viewMode "Pie chart"
+# Configuration option that toggles the inclusion of hidden files
+set includeHiddenFiles 0
 # This variable is part of a rubbish failsafe mechanism, an attempt at avoiding a situation where updateView gets called while another instance of updateView is already running.
 # When set to True, various routines and actions are disabled.
 set NO_DONT_DO_IT 0
 # For development use, when set to True, error messages have more information.
 set DEBUG 0
-
 
 #	o-------------------------------------o
 #	| Reset the app to its default state. |
@@ -121,6 +122,23 @@ proc sizeString {bytes} {
  return [string cat $bytes { bytes}]
 }
 
+#	o-----------------------------------------------o
+#	| Get a list of the contents of a given folder. |
+#	o-----------------------------------------------o
+
+proc getFolderContents {path} {
+ if {$::includeHiddenFiles} {
+  concat [glob -nocomplain -directory $path -- *] \
+  [lmap i [glob -nocomplain -directory $path -types hidden -- *] {
+   switch -- [lindex [file split $i] end] {
+    . - .. {continue}
+    default {set i}
+   }
+  }]
+ } else {
+  glob -nocomplain -directory $path -- *
+ }
+}
 
 #	o------------------------------------o
 #	| Get the size of folders and files. |
@@ -156,7 +174,7 @@ proc getFileSize {path} {
   if {[file isdirectory $path]} {
    set ::ticker [expr {$::ticker+1 & $::tickerDivisor}]; if {!$::ticker} {setStatus "Scanning: [string range $path end-44 end]"; update}
 
-   foreach i [glob -nocomplain -directory $path -- *] {
+   foreach i [getFolderContents $path] {
     incr total [getFileSize $i]
    }
 
@@ -192,7 +210,7 @@ proc checkFolder {path} {
  set totalItems 0
  set numFolders 0
  set numFiles 0
- foreach item [glob -nocomplain -directory $path -- *] {
+ foreach item [getFolderContents $path] {
   # item structure: Type, Path, Size in bytes 
   set isFolder [file isdirectory $item]
   lappend folderContents [list $isFolder $item [getFileSize $item]]
@@ -238,6 +256,7 @@ tk_optionMenu .top.viewmode viewMode {Pie chart} Boxes
 .top.viewmode configure -width 7
 # When viewMode is changed, we need to update the display.
 trace add variable viewMode write {apply {{args} {uplevel "#0" $::canvasUpdateScript}}}
+#trace add variable includeHiddenFiles write {apply {{args} {uplevel "#0" $::refreshMenuCmd}}}
 # Title: this is used to display the name of the folder currently being viewed in the middle of the top frame.
 label .top.title -font {Sans 14}
 # Menu button, for the main menu.
@@ -328,6 +347,7 @@ set menuQuitCmd {
 menu .top.menu.m -tearoff 0
 .top.menu.m add command -label "Scan folder..." -command $menuOpenCmd
 .top.menu.m add command -label "Refresh" -command $refreshMenuCmd
+.top.menu.m add checkbutton -label "Include hidden files" -command $refreshMenuCmd -variable includeHiddenFiles
 .top.menu.m add command -label "Help..." -command $menuHelpCmd
 .top.menu.m add command -label "About..." -command $menuAboutCmd
 .top.menu.m add command -label "Quit" -command $menuQuitCmd
@@ -625,7 +645,7 @@ proc updateView {path} {
  if {[tk windowingsystem] ne {aqua}} {
   tk busy .
   . configure -cursor watch
-  update
+  #update
  }
  # Don't allow the user to go below the root of this search session
  if {$path eq $::searchRoot} {
@@ -683,7 +703,7 @@ proc initSession {path} {
   set path /$realPath
  }
  wm title . "Folder size analysis: scanning..."
- . configure -cursor watch; update
+ . configure -cursor watch;# update
  set ::searchRoot $path
  set timeTaken [lindex [time {
   uplevel "#0" {
@@ -693,7 +713,7 @@ proc initSession {path} {
  }] 0]
  #puts "Completed in [expr $timeTaken/1000000.0] seconds"
  wm title . "Folder size analysis: [lindex [file split $path] end]"
- . configure -cursor {}; update
+ . configure -cursor {};# update
 }
 
 
@@ -708,6 +728,8 @@ Recognised options:
   Display this message.
  -scan (path), -path (path)
   Scan (path) at startup.
+ -includehidden
+  Include hidden files in the search.
  -view (mode)
   Set the view mode at startup.
   Valid modes are:
@@ -734,6 +756,9 @@ for {set i 0} {$i < $argc} {incr i} {
     puts "Valid options are:\n pie\n boxes"
     exit
    }
+  }
+  -includehidden {
+   set includeHiddenFiles 1
   }
   -h - -help - --help {
    puts $helpMessage
