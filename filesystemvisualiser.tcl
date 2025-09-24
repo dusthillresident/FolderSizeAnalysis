@@ -1,3 +1,4 @@
+#!/usr/bin/env tclsh
 #  _______________________________________________________________________
 # |                                                                       |
 # | File system usage visualiser, Apr 2024, by dusthillresident@gmail.com |
@@ -24,6 +25,7 @@ if {[tk windowingsystem] eq {aqua}} {
 #	| Key global variables. |
 #	o-----------------------o
 
+
 # Path of the folder that is currently being viewed.
 set viewingFolder {}
 # Path of the root level of the directory structure that's been analysed in the current session.
@@ -41,10 +43,12 @@ set NO_DONT_DO_IT 0
 # For development use, when set to True, error messages have more information.
 set DEBUG 0
 
+
 #	o-------------------------------------o
 #	| Reset the app to its default state. |
 #	o-------------------------------------o
 # To be used in situations like, for example, recovering from an error
+
 
 proc resetAppState {} {
 
@@ -83,6 +87,8 @@ proc reportError {errorInfo} {
 #	o---------------------------------------o
 #	| Open files in the system default app. |
 #	o---------------------------------------o
+
+
 proc openFileExternally {filePath} {
  #puts "opening '$filePath'"
  #tk_messageBox -title test -message $filePath -detail $filePath
@@ -103,14 +109,40 @@ proc openFileExternally {filePath} {
 #	o-------------------------------------o
 #	| Set the contents of the status bar. |
 #	o-------------------------------------o
+
+
 proc setStatus {text} {
  .bottom.status configure -text $text
+}
+set _status_progress_hidden 1
+proc statusHideProgress {} {
+ if {!$::_status_progress_hidden} {
+  catch {pack forget .bottom.progress} 
+  catch {.c delete progress}
+  set ::_status_progress_hidden 1
+ }
+}
+proc statusShowProgress {p} {
+ if {$::_status_progress_hidden} {
+  catch {pack .bottom.progress -side right}
+  catch {foreach i {black white} {.c create text 0 0 -tag [list $i progress] -font {monospace 20} -fill $i }}
+  set ::_status_progress_hidden 0
+ }
+ set x [expr {[winfo width .c]/2}]
+ set y [expr {[winfo height .c]/2}]
+ .c coords progress $x $y
+ .c coords white [incr x 2] [incr y -2]
+ set ::statusbar_progress $p
+ set v [expr { int( 10 * $::statusbar_progress ) }]
+ .c itemconfigure progress -text [string cat [string repeat "*" $v] [string repeat "." [expr {10-$v}]]]
 }
 
 
 #	o--------------------------------------------------------o
 #	| Format a number of bytes into a human readable string. |
 #	o--------------------------------------------------------o
+
+
 proc sizeString {bytes} {
  if {$bytes >= 1024*1024*1024} {
   return [string cat [format %.2f [expr {$bytes/1024.0/1024.0/1024.0}]] { GB}]
@@ -122,9 +154,11 @@ proc sizeString {bytes} {
  return [string cat $bytes { bytes}]
 }
 
+
 #	o-----------------------------------------------o
 #	| Get a list of the contents of a given folder. |
 #	o-----------------------------------------------o
+
 
 proc getFolderContents {path} {
  if {$::includeHiddenFiles} {
@@ -140,9 +174,11 @@ proc getFolderContents {path} {
  }
 }
 
+
 #	o------------------------------------o
 #	| Get the size of folders and files. |
 #	o------------------------------------o
+
 
 # These are some constants that are used to decide how regularly to update the status bar while scanning.
 set ticker -1
@@ -151,7 +187,7 @@ set tickerDivisor 1023; # Must be a power of 2, minus 1.
 # so we need to update more often or it might seem to users as if the app has hung up.
 if {[tk windowingsystem] ne {x11}} {set tickerDivisor 511}
 
-proc getFileSize {path} {
+proc getFileSize {path {weAreSearchingASubfolder 0}} {
  #puts "getFileSize: '$path'"
  #set thisCallNumber [incr ::GFScallnumber]
 
@@ -172,15 +208,43 @@ proc getFileSize {path} {
  if {[catch {
 
   if {[file isdirectory $path]} {
-   set ::ticker [expr {$::ticker+1 & $::tickerDivisor}]; if {!$::ticker} {setStatus "Scanning: [string range $path end-44 end]"; update}
+   set contents [getFolderContents $path]
+ 
+   if {$weAreSearchingASubfolder} {
 
-   foreach i [getFolderContents $path] {
-    incr total [getFileSize $i]
+    if {! [set ::ticker [expr {$::ticker+1 & $::tickerDivisor}]] } {
+     set stringSpace [expr {[winfo width .bottom]/14}]
+     if {$stringSpace>=[string length $path]} {
+      setStatus "Scanning: $path"
+     } else {
+      setStatus "Scanning: ...[string range $path end-$stringSpace end]"
+     }
+     update
+    }
+
+    foreach subItem $contents {incr total [getFileSize $subItem 1]}
+
+   } else {
+
+    statusShowProgress 0.0
+    set contentsLength [expr { double([llength $contents]) }]
+    set subItemNumber 0
+    set timeAtLastCheck [clock microseconds]
+    foreach subItem $contents {
+     incr subItemNumber
+     if { [clock microseconds] - $timeAtLastCheck >= 250000 } {
+      statusShowProgress [expr { $subItemNumber / $contentsLength }]
+      update
+      set timeAtLastCheck [clock microseconds]
+     }
+     incr total [getFileSize $subItem 1]
+    }
+    statusHideProgress
+
    }
-
+   
    set ::folderSizeCache($path) $total
    
-
   } else {
    set total [file size $path]
   }
@@ -197,6 +261,8 @@ proc getFileSize {path} {
 #	o-------------------------------------------------------------------o
 #	| Obtain a 'folderData' structured list for a specified folder path |
 #	o-------------------------------------------------------------------o
+
+
 proc checkFolder {path} {
  global folders
  if {[info exists folders($path)]} {
@@ -229,6 +295,7 @@ proc checkFolder {path} {
 #	o---------------------------o
 #	| Build the user interface. |
 #	o---------------------------o
+
 
 #  ___________________________________________________________________
 # |                  Top: control & navigation bar                    |
@@ -268,13 +335,36 @@ grid columnconfigure .top 2 -weight 1
 pack [canvas .c -borderwidth 0 -width 1 -height 1 -background [lindex [.top configure -background] end] ] -fill both -expand 1
 # ===== Bottom: status & info bar =====
 pack [frame .bottom -relief sunken -borderwidth 1] -fill x
-pack [label .bottom.filler -text { }] -fill x
-place [label .bottom.status] -x 4 -y 0
+#pack [label .bottom.filler -text { }] -fill x
+pack [label .bottom.status -anchor s] -side left
+ttk::progressbar .bottom.progress -variable statusbar_progress -maximum 1.0
+# F5 to refresh
+bind . <KeyPress-F5> {uplevel "#0" $::refreshMenuCmd}
+# Mousewheel up
+bind . <ButtonPress-4> {
+ #puts "ButtonPress-4"
+ if { [catch {[string cat $viewMode _wheelup]} errInfo ] } {
+  puts "errInfo $errInfo"
+ }
+}
+# Mousewheel down
+bind . <ButtonPress-5> {
+ #puts "ButtonPress-5"
+ if { [catch {[string cat $viewMode _wheeldown]} errInfo ] } {
+  puts "errInfo $errInfo"
+ }
+}
+if { [tk windowingsystem] ne "x11" } {
+ bind . <MouseWheel> {
+  eval [bind . <ButtonPress-[expr {5-(%D<0)}]>]
+ }
+}
 
 
 #	o----------------------------o
 #	| Configuration of the menu. |
 #	o----------------------------o
+
 
 # Define the command scripts for the menu options
 # 'About'
@@ -381,6 +471,7 @@ if {[tk windowingsystem] eq {aqua}} {
 #	| Return either 's' or an empty string, to make words plural when appropriate |
 #	o-----------------------------------------------------------------------------o
 
+
 proc plural {n} {
  return [lindex {{} s} [expr {$n != 1}]]
 }
@@ -389,6 +480,7 @@ proc plural {n} {
 #	o------------------------------------------------o
 #	| Stuff related to rendering the visual display. |
 #	o------------------------------------------------o
+
 
 # The colours used for visual display.
 set itemOutlineColour		"dark gray"
@@ -404,9 +496,11 @@ set boxTextColour		"white"
 set itemColours			[list $fileColour $folderColour]
 set itemColoursBright		[list $fileColourBright $folderColourBright]
 
+
 #	o--------------------------------o
 #	| The 'Boxes' view display mode. |
 #	o--------------------------------o
+
 
 # Some constants used to adjust the padding of the "Boxes"
 set boxPadding1 10
@@ -536,29 +630,61 @@ proc "Boxes" {} {
  .c bind $thisBox <ButtonPress-1> {}
 }
 
+proc Boxes_wheelup {} {}
+proc Boxes_wheeldown {} {}
+
 
 #	o------------------------------------o
 #	| The 'Pie chart' view display mode. |
 #	o------------------------------------o
 
-# Redraw function for "Pie chart" drawing mode, called by updateView
-proc "Pie chart" {} {
 
- upvar 1 folderContents folderContents folderTotalSize folderTotalSize path path
+proc Pie\ chart_wheeldown {} {
+ if {$::pieChartMaxLevel < 5} {
+  incr ::pieChartMaxLevel
+  uplevel "#0" $::canvasUpdateScript
+ }
+}
+proc Pie\ chart_wheelup {} {
+ if {$::pieChartMaxLevel > 1} {
+  incr ::pieChartMaxLevel -1
+  uplevel "#0" $::canvasUpdateScript
+ }
+}
+
+set pieChartMaxLevel 1
+
+# Redraw function for "Pie chart" drawing mode, called by updateView
+proc "Pie chart" { {level 0} {sliceStart 0.0} {sliceExtent 360.0}  } {
+
+ upvar ::pieChartMaxLevel maxLevel
+ #puts "maxLevel is $maxLevel"
+ if {$level == 0} {
+  for {set i $maxLevel} {$i >= 0} {incr i -1} {
+   .c create image -1000 -1000 -tag [list levelMarker$i levelMarkers]
+  }
+  upvar 1 folderContents folderContents folderTotalSize folderTotalSize path path
+ } else {
+  set path [uplevel 1 {set itemPath}]
+  set folderData [checkFolder $path]
+  lassign $folderData {} folderTotalSize folderContents {} totalItems numFolders numFiles
+ }
 
  # Calculate the x;y screen positions for the pie. We want it to be in the centre of the canvas,
  # and to leave just a little bit of space so it's not touching the edges of the canvas.
- set wh [expr {min( [winfo width .c]-9, [winfo height .c]-9 )}]
- foreach i {x y} j {width height} {
-  set k1 [string cat $i 1]
-  set k2 [string cat $i 2]
-  set $k1 [expr { [winfo $j .c] - ([winfo $j .c]/2 - $wh/2)-1 }]
-  set $k2 [expr { [winfo $j .c] - [set $k1] }]
- }
+ set WH [expr { min( [winfo width .c], [winfo height .c] )-9 }]
+ set wh [expr { $WH * 0.5 * (($level+1)/double($maxLevel)) }]
+ #puts $wh
+ set cx [expr { [winfo width .c]/2 }]
+ set cy [expr { [winfo height .c]/2 }]
+ set x1 [expr { $cx - $wh }]
+ set x2 [expr { $cx + $wh }]
+ set y1 [expr { $cy - $wh }]
+ set y2 [expr { $cy + $wh }]
  # The start angle of the current pie slice. This is incremented for every pie slice we create
  set startAngle 0.0
  # Slices smaller than this threshold will be combined into the 'smaller files' pie slice at the end
- set smallnessThreshold [expr { 6.0 / (2*(22.0/7.0)*($wh/2.0))*360.0 }]
+ set smallnessThreshold [expr { 6.0 / (2*(22.0/7.0)*($WH/2.0))*(360.0*360.0/$sliceExtent) }]
  # This records the size of the 'smaller files' slice. It's incremented for every pie slice that was below the smallness threshold
  set smallFilesExtent 0.0
  # These variables keep track of the file information for the statusbar message when you mouse over the 'smaller files' slice
@@ -581,18 +707,20 @@ proc "Pie chart" {} {
   }
   # Display this pie slice
   set thisSliceItem [.c create arc $x1 $y1 $x2 $y2 \
-   -start [expr {$startAngle}] \
-   -extent [expr {$thisSliceExtent-0.000000001}] \
+   -start [expr {$sliceStart+$startAngle/360.0*$sliceExtent}] \
+   -extent [expr {($thisSliceExtent/360.0*$sliceExtent)-0.000000001}] \
    -outline $::itemOutlineColour \
    -activeoutline $::itemOutlineColourBright \
    -fill [lindex $::itemColours $thisItemIsAFolder] \
    -activefill [lindex $::itemColoursBright $thisItemIsAFolder] \
    -width 1]
+  .c raise $thisSliceItem levelMarker$level
   # Mouse hover binding for pie slices
   .c bind $thisSliceItem <Enter> [list setStatus "[sizeString $itemSize] : [lindex [file split $itemPath] end]"]
   .c bind $thisSliceItem <Leave> {setStatus $::totalSizeMessage}
   # Mouse click binding for pie slices
   if {$thisItemIsAFolder} {
+   if {$level+1 < $maxLevel} {"Pie chart" [expr {$level + 1}] [.c itemcget $thisSliceItem -start] [.c itemcget $thisSliceItem -extent]}
    # Left click to view the analysis of this folder
    .c bind $thisSliceItem <ButtonPress-1> [list updateView $itemPath]
    # Right click to open this folder in the system file manager
@@ -606,28 +734,30 @@ proc "Pie chart" {} {
 
  # If there is a smaller files pie slice, display it now.
  if {$smallFilesExtent > 0.0} {
-
-  set ::smallFilesMessage "[sizeString $smallFilesSize] : $smallFilesNumber smaller files"
-
   set thisSliceItem [.c create arc $x1 $y1 $x2 $y2 \
-   -start [expr {floor($startAngle)}] \
-   -extent [expr {ceil($smallFilesExtent)}] \
+   -start [expr {floor($sliceStart+$startAngle/360.0*$sliceExtent) }] \
+   -extent [expr {min(ceil($smallFilesExtent/360.0*$sliceExtent),360.0)-0.000000001}] \
    -outline $::itemOutlineColour \
    -activeoutline $::itemOutlineColourBright \
    -fill $::smallFilesColour \
    -activefill $::smallFilesColourBright \
    -width 1]
+  .c raise $thisSliceItem levelMarker$level
   # Mouse hover binding for smaller files pie slice
-  .c bind $thisSliceItem <Enter> {setStatus $::smallFilesMessage}
+  .c bind $thisSliceItem <Enter> [list setStatus "[sizeString $smallFilesSize] : $smallFilesNumber smaller files"]
   .c bind $thisSliceItem <Leave> {setStatus $::totalSizeMessage}
  }
 
+ if {!$level} {
+  .c delete levelMarkers
+ }
 }
 
 
 #	o--------------------------------------------------------o
 #	| Set the current viewing folder and update the display. |
 #	o--------------------------------------------------------o
+
 
 # Update the view, either because the screen needs redrawing or because the user has navigated to view a different folder
 proc updateView {path} {
@@ -695,6 +825,7 @@ bind .c <Configure> $canvasUpdateScript
 #	| Initialise the current session. |
 #	o---------------------------------o
 
+
 # This starts a new session, with $path as the root folder of the search session.
 proc initSession {path} {
  #puts "initSession: $path"
@@ -720,6 +851,9 @@ proc initSession {path} {
 #	o-----------------------------------------o
 #	| Process program command line arguments. |
 #	o-----------------------------------------o
+
+
+update idletasks
 
 set helpMessage {
 ==== Filesystem analyser ====
@@ -765,9 +899,13 @@ for {set i 0} {$i < $argc} {incr i} {
    exit
   }
   default {
-   puts "Unrecognised command line option '[lindex $argv $i]'"
-   puts $helpMessage
-   exit
+   if {$i == 0 && [file isdirectory [lindex $argv $i]]} {
+    set startupSearchPath [lindex $argv $i]
+   } else {
+    puts "Unrecognised command line option '[lindex $argv $i]'"
+    puts $helpMessage
+    exit
+   }
   }
  }
 }
