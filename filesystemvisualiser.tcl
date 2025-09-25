@@ -706,9 +706,11 @@ proc "Pie chart" { {level 0} {sliceStart 0.0} {sliceExtent 360.0}  } {
    continue
   }
   # Display this pie slice
+  set thisSliceActualStart  [expr {$sliceStart+$startAngle/360.0*$sliceExtent}]
+  set thisSliceActualExtent [expr {($thisSliceExtent/360.0*$sliceExtent)}]
   set thisSliceItem [.c create arc $x1 $y1 $x2 $y2 \
-   -start [expr {$sliceStart+$startAngle/360.0*$sliceExtent}] \
-   -extent [expr {($thisSliceExtent/360.0*$sliceExtent)-0.000000001}] \
+   -start $thisSliceActualStart \
+   -extent [expr {$thisSliceActualExtent-0.000000001}] \
    -outline $::itemOutlineColour \
    -activeoutline $::itemOutlineColourBright \
    -fill [lindex $::itemColours $thisItemIsAFolder] \
@@ -720,7 +722,7 @@ proc "Pie chart" { {level 0} {sliceStart 0.0} {sliceExtent 360.0}  } {
   .c bind $thisSliceItem <Leave> {setStatus $::totalSizeMessage}
   # Mouse click binding for pie slices
   if {$thisItemIsAFolder} {
-   if {$level+1 < $maxLevel} {"Pie chart" [expr {$level + 1}] [.c itemcget $thisSliceItem -start] [.c itemcget $thisSliceItem -extent]}
+   if {$level+1 < $maxLevel} {"Pie chart" [expr {$level + 1}] $thisSliceActualStart $thisSliceActualExtent}
    # Left click to view the analysis of this folder
    .c bind $thisSliceItem <ButtonPress-1> [list updateView $itemPath]
    # Right click to open this folder in the system file manager
@@ -733,10 +735,12 @@ proc "Pie chart" { {level 0} {sliceStart 0.0} {sliceExtent 360.0}  } {
  }
 
  # If there is a smaller files pie slice, display it now.
+ set thisSliceActualStart  [expr {$sliceStart+$startAngle/360.0*$sliceExtent}]
+ set thisSliceActualExtent [expr {($smallFilesExtent/360.0*$sliceExtent)}]
  if {$smallFilesExtent > 0.0} {
   set thisSliceItem [.c create arc $x1 $y1 $x2 $y2 \
-   -start [expr {floor($sliceStart+$startAngle/360.0*$sliceExtent) }] \
-   -extent [expr {min(ceil($smallFilesExtent/360.0*$sliceExtent),360.0)-0.000000001}] \
+   -start $thisSliceActualStart \
+   -extent [expr {$thisSliceActualExtent-0.000000001}] \
    -outline $::itemOutlineColour \
    -activeoutline $::itemOutlineColourBright \
    -fill $::smallFilesColour \
