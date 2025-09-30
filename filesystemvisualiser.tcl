@@ -20,6 +20,10 @@ if {[tk windowingsystem] eq {aqua}} {
  set rightClick 2
 }
 
+set dndEnabled 0
+if { ! [catch {package require tkdnd}] } {
+ set dndEnabled 1
+}
 
 #	o-----------------------o
 #	| Key global variables. |
@@ -55,9 +59,10 @@ proc resetAppState {} {
  foreach i [split {
   tk busy forget .
   . configure -cursor {}
-  .top.up -state disabled
+  .top.up configure -state disabled
   .c delete all
   .top.title configure -text {}
+  .top.menu configure -state normal
   wm title . [tk appname]
  } \n] {
   catch {
@@ -71,6 +76,10 @@ proc resetAppState {} {
  set ::NO_DONT_DO_IT 0
  set ::searchRoot {}
  set ::viewingFolder {}
+ 
+ restoreGoUpButton
+ statusHideProgress
+ setStatus "Choose 'Scan' from the menu [lindex {{} {or drop in a folder }} $::dndEnabled]to begin"
 }
 
 
@@ -79,7 +88,7 @@ proc resetAppState {} {
 #	o------------------------------o
 proc reportError {errorInfo} {
  if {!$::DEBUG} {set errorInfo [lindex [split $errorInfo \n] 0]}
- tk_messageBox -title "Error" -message "Error" -detail "Something went wrong when trying to scan '$::searchRoot'.\n\nError information:\n$errorInfo"
+ tk_messageBox -title "Error" -message "Error" -detail "Something went wrong.\n\nError information:\n$errorInfo"
  setStatus "An error occured: $errorInfo"
 }
 
@@ -116,6 +125,7 @@ proc setStatus {text} {
 }
 set _status_progress_hidden 1
 proc statusHideProgress {} {
+ #puts "statusHideProgress"
  if {!$::_status_progress_hidden} {
   catch {pack forget .bottom.progress} 
   catch {.c delete progress}
@@ -123,6 +133,7 @@ proc statusHideProgress {} {
  }
 }
 proc statusShowProgress {p} {
+ #puts "statusShowProgress $p"
  if {$::_status_progress_hidden} {
   catch {pack .bottom.progress -side right}
   catch {foreach i {black white} {.c create text 0 0 -tag [list $i progress] -font {monospace 20} -fill $i }}
@@ -219,7 +230,7 @@ proc getFileSize {path {weAreSearchingASubfolder 0}} {
      } else {
       setStatus "Scanning: ...[string range $path end-$stringSpace end]"
      }
-     update
+     checkCancelButton; update
     }
 
     foreach subItem $contents {incr total [getFileSize $subItem 1]}
@@ -234,7 +245,7 @@ proc getFileSize {path {weAreSearchingASubfolder 0}} {
      incr subItemNumber
      if { [clock microseconds] - $timeAtLastCheck >= 250000 } {
       statusShowProgress [expr { $subItemNumber / $contentsLength }]
-      update
+      checkCancelButton; update
       set timeAtLastCheck [clock microseconds]
      }
      incr total [getFileSize $subItem 1]
@@ -249,8 +260,10 @@ proc getFileSize {path {weAreSearchingASubfolder 0}} {
    set total [file size $path]
   }
 
- } errinfo ]} {
-  #puts "test $thisCallNumber	'$path', $errinfo"
+ } errInfo ]} {
+  #puts "test $thisCallNumber	'$path', $errInfo"
+  #puts "getFileSize: error when scanning '$path'\nError info:\n$errInfo"
+  if { [string range $errInfo 0 16] eq "search_cancelled" } {error "search_cancelled"}
   return 0
  }
 
@@ -279,7 +292,7 @@ proc checkFolder {path} {
  foreach item [getFolderContents $path] {
   # item structure: Type, Path, Size in bytes 
   set isFolder [file isdirectory $item]
-  lappend folderContents [list $isFolder $item [getFileSize $item]]
+  lappend folderContents [list $isFolder $item [getFileSize $item 1]]
   incr totalItems
   if {$isFolder} {incr numFolders} else {incr numFiles}
  }
@@ -312,10 +325,14 @@ pack [frame .top -relief raised -borderwidth 1] -fill x
 # The "go up" button
 button .top.up -text "Go up" -state disabled
 .top.up configure -command {
- set rootPath [lindex $folders($viewingFolder) 3]
- #puts "rootpath '$rootPath'"
- if {$rootPath ne {}} {
-  updateView $rootPath
+ if {$::cancelButtonEnabled} {
+  set cancelButtonPressed 1
+ } else {
+  set rootPath [lindex $folders($viewingFolder) 3]
+  #puts "rootpath '$rootPath'"
+  if {$rootPath ne {}} {
+   updateView $rootPath
+  }
  }
 }
 # The viewMode menu, which sets the current view mode
@@ -387,10 +404,7 @@ set menuOpenCmd {
   set dirMsg {-message {Choose a folder to analyse.}}
   set path [eval tk_chooseDirectory -mustexist 1 -parent . -title \{Scan folder\} [lindex [list {} $dirMsg] [expr {[tk windowingsystem] eq {aqua}}]]]
   if {$path ne {}} {
-   if {[catch {initSession $path} errorInfo ]} {
-    reportError $errorInfo
-    resetAppState
-   }
+   initSessionAndReportError $path
   }
  }
 }
@@ -407,25 +421,28 @@ set menuHelpCmd {
   {  Left click:}
   {    opens the file in the system default app.}
   {}
+  {You can use the mouse wheel in the 'Pie chart' view to show up to 4 levels of subdirectories.}
+  {}
   {If you make changes to the folder you're searching while the app is still running, you should select 'Refresh' from the menu.}
+  {You can also press 'F5' on the keyboard to refresh.}
   } \n]
 }
 # 'Refresh'
 set refreshMenuCmd {
  if {$::searchRoot ne {} && !$NO_DONT_DO_IT} {
-  if {[catch {
-   set saveCurrentSearchRoot $::searchRoot
-   set saveCurrentViewingFolder $::viewingFolder
+  set saveCurrentSearchRoot $::searchRoot
+  set saveCurrentViewingFolder $::viewingFolder
+  resetAppState
+  set failed [initSession $saveCurrentSearchRoot]
+  if { $failed } {
    resetAppState
-   initSession $saveCurrentSearchRoot
-   updateView $saveCurrentViewingFolder
-  } errorInfo] } {
-   if { [string first "no such file or directory" $errorInfo] != -1 } {
-    setStatus "Folder no longer exists"
+   if { [string first "no such file or directory" $::sessionError] != -1 } {
+    setStatus "Folder '$saveCurrentSearchRoot' no longer exists"
    } else {
-    reportError $errorInfo
+    reportError $::sessionError
    }
-   resetAppState
+  } else {
+   updateView $saveCurrentViewingFolder
   }
  }
 }
@@ -777,15 +794,9 @@ proc updateView {path} {
  # Set the mouse cursor to the watch and lock the window
  # This hangs on Mac OS, need to investigate
  if {[tk windowingsystem] ne {aqua}} {
-  tk busy .
+  #tk busy .
   . configure -cursor watch
   #update
- }
- # Don't allow the user to go below the root of this search session
- if {$path eq $::searchRoot} {
-  .top.up configure -state disabled
- } else {
-  .top.up configure -state normal
  }
  # Set the 'viewing:' title and clear the canvas
  .top.title configure -text [lindex [file split $path] end]
@@ -807,14 +818,19 @@ proc updateView {path} {
  # Causes hang on Mac OS, need to investigate
  if {[tk windowingsystem] ne {aqua}} {
   . configure -cursor {}
-  tk busy forget .
+  #tk busy forget .
  }
  #puts "updateView END"
  # This restores the normal state so that updateView may be allowed to run again.
  set ::NO_DONT_DO_IT 0
+ # Don't allow the user to go below the root of this search session
+ if {$path eq $::searchRoot} {
+  .top.up configure -state disabled
+ } else {
+  .top.up configure -state normal
+ }
  bind .c <Configure> $::canvasUpdateScript
 }
-
 
 # Whenever the size of the canvas changes etc, redraw the display appropriately
 set canvasUpdateScript {
@@ -825,32 +841,106 @@ set canvasUpdateScript {
 bind .c <Configure> $canvasUpdateScript
 
 
+#	o-------------------------------o
+#	| The ability to cancel a scan. |
+#	o-------------------------------o
+
+
+set cancelButtonEnabled 0
+set cancelButtonPressed 0
+proc enableCancelButton {} {
+ .top.up configure -text "Cancel search"
+ .top.up configure -state normal
+ .top.menu configure -state disabled
+ .top.viewmode configure -state disabled
+ set ::cancelButtonEnabled 1; set ::cancelButtonPressed 0
+}
+proc restoreGoUpButton {} {
+ set ::cancelButtonEnabled 0; set ::cancelButtonPressed 0
+ .top.up configure -text "Go up"
+ .top.menu configure -state normal
+ .top.viewmode configure -state normal
+}
+proc checkCancelButton {} {
+ if {$::cancelButtonPressed} {
+  set ::cancelButtonPressed 0
+  error "search_cancelled"
+ }
+}
+
+
 #	o---------------------------------o
 #	| Initialise the current session. |
 #	o---------------------------------o
 
 
 # This starts a new session, with $path as the root folder of the search session.
+set sessionError ""
 proc initSession {path} {
- #puts "initSession: $path"
- set path [file normalize $path]
- if { ! [catch {set realPath [file readlink $path]}] } {
-  set path /$realPath
+ if {$::NO_DONT_DO_IT} {
+  puts "Debug/warning: initSession: can't start search, a search is already happening"
+  return 0
  }
- wm title . "Folder size analysis: scanning..."
- . configure -cursor watch;# update
- set ::searchRoot $path
- set timeTaken [lindex [time {
-  uplevel "#0" {
-   cd $searchRoot
-   updateView $searchRoot
+ if { $path eq {} } {
+  resetAppState
+  return 0
+ }
+ if { ! [file isdirectory $path] } {
+  set path [string range $path 0 [string last "/" $path]]
+ }
+ enableCancelButton
+ if { [catch {
+  #puts "initSession: $path"
+  set path [file normalize $path]
+  if { ! [catch {set realPath [file readlink $path]}] } {
+   if { [string range $realPath 0 0] ne {/} } {
+    set realPath [string cat [string range $path 0 [string last "/" $path]] $realPath]
+   }
+   set path $realPath
   }
- }] 0]
+  wm title . "Folder size analysis: scanning..."
+  . configure -cursor watch;# update
+  set ::searchRoot $path
+  set timeTaken [lindex [time {
+   uplevel "#0" {
+    cd $searchRoot
+    updateView $searchRoot
+   }
+  }] 0]
+ } errInfo] } {
+  if { [string range $errInfo 0 16] ne "search_cancelled" } {
+   resetAppState
+   puts "oh no"
+   set ::sessionError $errInfo
+   return 1
+  } else {
+   resetAppState
+   return 0
+  }
+ }
  #puts "Completed in [expr $timeTaken/1000000.0] seconds"
  wm title . "Folder size analysis: [lindex [file split $path] end]"
  . configure -cursor {};# update
+ restoreGoUpButton
+ return 0
 }
 
+proc initSessionAndReportError {path} {
+ if { [initSession $path] } {
+  reportError $::sessionError
+ }
+}
+
+
+#	o----------------o
+#	| Drag and drop. |
+#	o----------------o
+
+
+if {$dndEnabled} {
+ tkdnd::drop_target register .c DND_Files
+ bind .c <<Drop:DND_Files>> {initSessionAndReportError [lindex %D 0]}
+}
 
 #	o-----------------------------------------o
 #	| Process program command line arguments. |
@@ -914,12 +1004,5 @@ for {set i 0} {$i < $argc} {incr i} {
  }
 }
 
-if {$startupSearchPath eq {}} {
- #set startupSearchPath [pwd]
- setStatus "Choose 'Scan' from the menu to begin"
-} else {
- if {[catch {initSession $startupSearchPath} errorInfo]} {
-  puts [lindex [split $errorInfo \n] 0]
-  exit
- }
-}
+initSessionAndReportError $startupSearchPath
+
