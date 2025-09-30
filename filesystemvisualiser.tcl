@@ -5,6 +5,10 @@
 # |_______________________________________________________________________|
 
 package require Tk
+set dndEnabled 0
+if { ! [catch {package require tkdnd}] } {
+ set dndEnabled 1
+}
 tk appname {Folder Size Analysis}
 wm geometry . 400x400
 # This makes sure that the 'X' close button instantly quits the program.
@@ -20,10 +24,26 @@ if {[tk windowingsystem] eq {aqua}} {
  set rightClick 2
 }
 
-set dndEnabled 0
-if { ! [catch {package require tkdnd}] } {
- set dndEnabled 1
-}
+
+#	o------------------o
+#	| Application icon |
+#	o------------------o
+
+
+set icon {iVBORw0KGgoAAAANSUhEUgAAAEAAAABABAMAAABYR2ztAAAACXBIWXMAAC4jAAAuI
+wF4pT92AAAAB3RJTUUH6QkeFCUTNys4ogAAABl0RVh0Q29tbWVudABDcmVhdGVkIHdpdGggR0lN
+UFeBDhcAAAAYUExURdQt7vb59REPBCenqE4t7l96W/b59fvRBklOeEoAAAACdFJOUwAAdpPNOAA
+AAZtJREFUSMfNlU2OhCAQhXHT+9lwAGYyfQASD9Ax3EDXJNp1gN5w/aGKkgJFTeYnmVrK53uP31
+LqV0sDlT8Y7iCXP/p9GbBck5BxQvxe/zkKsCdwvAQGgK3BOI4TDAXha4FxC7hKQj8TkGoPJIEMU
+JbKQgR4GSIBjQR5ISLo9gL4dcmT3EecSLc5yeSQkjUBFhgKwFUWBKR8Lqfsfe3Ai+jW/Z4tNICH
+MYYBWwDxILBDHDcf5DBbKx56Xf+HCeFlWKCQ0DMD5h5CQAkUEKBDP3RAAZSgsuKBgEWABKIE1Xs
+LCFIvlFgBNKQIBRCMhNA4pf8JyBU+ARL0XYD3rD8F5p8CfGzSZl0CSwuwG+BebveSDh6uprYpxM
+MU9QmLADllUfEq08lcAcsXH+ie82Ownn0K0cMGQIk94GAUwOf7Jx4FMMVtgrkASMKVDkrd+ESwx
+1JnxJGbUoVHJDIw1e+sTncRJMLmpSaPaAKQ12Dz1q8SgB5To+OIxFFHSjP13WHHeuO9x8bW7nko
+AWcds6sevoOm6K+6rr/qy+qP6gs+QaETDncZEAAAAABJRU5ErkJggg==}
+image create photo appIcon -data $icon
+wm iconphoto . appIcon
+
 
 #	o-----------------------o
 #	| Key global variables. |
