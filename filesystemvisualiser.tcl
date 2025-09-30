@@ -9,6 +9,7 @@ set dndEnabled 0
 if { ! [catch {package require tkdnd}] } {
  set dndEnabled 1
 }
+#set dndEnabled 0 ;# This line is for testing purposes
 tk appname {Folder Size Analysis}
 wm geometry . 400x400
 # This makes sure that the 'X' close button instantly quits the program.
@@ -364,7 +365,8 @@ trace add variable viewMode write {apply {{args} {uplevel "#0" $::canvasUpdateSc
 # Title: this is used to display the name of the folder currently being viewed in the middle of the top frame.
 label .top.title -font {Sans 14}
 # Menu button, for the main menu.
-menubutton .top.menu -text [encoding convertfrom utf-8 [binary format H* E298B0]] -padx 2 -pady 2 -font {{sans} 14 bold} -borderwidth 1 -relief raised
+set hamburger [encoding convertfrom utf-8 [binary format H* E298B0]]
+menubutton .top.menu -text $hamburger -padx 2 -pady 2 -font {{sans} 14 bold} -borderwidth 1 -relief raised
 # Configure the items in the top bar with 'grid
 grid {*}[winfo children .top]
 grid columnconfigure .top 2 -weight 1
@@ -430,7 +432,10 @@ set menuOpenCmd {
 }
 # 'Help...'
 set menuHelpCmd {
- tk_messageBox -title "Help info" -message "How to use '[tk appname]'" -detail [join {
+ tk_messageBox -title "Help info" -message "How to use '[tk appname]'" -detail [subst [join {
+  {Choose 'Scan folder' from the $hamburger menu}
+  {[lindex {{} {or drag & drop in a folder }} $dndEnabled]to begin.}
+  {}
   {For folder items:}
   {  Left click:}
   {    shows the analysis of that folder.}
@@ -445,7 +450,7 @@ set menuHelpCmd {
   {}
   {If you make changes to the folder you're searching while the app is still running, you should select 'Refresh' from the menu.}
   {You can also press 'F5' on the keyboard to refresh.}
-  } \n]
+  } \n]]
 }
 # 'Refresh'
 set refreshMenuCmd {
@@ -645,7 +650,7 @@ proc boxArea {x y w h item} {
  
  # If we have a 'smaller files' item to display, display it now
  if {$smallFilesWidth>1.0} {
-  set [lindex {h w} [expr {$w>$h}]] [expr {$smallFilesWidth-1}]
+  set [lindex {w h} $widthIsLessThanHeight] [expr {$smallFilesWidth-1}]
   set smallFilesItem [.c create rectangle [expr $x+1] [expr $y+1] [expr {$x+$w-1}] [expr {$y+$h-1}] \
    -fill $::smallFilesColour \
    -activefill $::smallFilesColourBright \
