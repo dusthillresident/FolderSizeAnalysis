@@ -399,22 +399,22 @@ ttk::progressbar .bottom.progress -variable statusbar_progress -maximum 1.0
 # F5 to refresh
 bind . <KeyPress-F5> {uplevel "#0" $::refreshMenuCmd}
 # Mousewheel up
-bind . <ButtonPress-4> {
+bind .c <ButtonPress-4> {
  #puts "ButtonPress-4"
  if { [catch {[string cat $viewMode _wheelup]} errInfo ] } {
   puts "errInfo $errInfo"
  }
 }
 # Mousewheel down
-bind . <ButtonPress-5> {
+bind .c <ButtonPress-5> {
  #puts "ButtonPress-5"
  if { [catch {[string cat $viewMode _wheeldown]} errInfo ] } {
   puts "errInfo $errInfo"
  }
 }
 if { [tk windowingsystem] ne "x11" } {
- bind . <MouseWheel> {
-  eval [bind . <ButtonPress-[expr {5-(%D<0)}]>]
+ bind .c <MouseWheel> {
+  eval [bind .c <ButtonPress-[expr {5-(%D<0)}]>]
  }
 }
 # Let's also add some 'Sorting' options to the viewmode menu
