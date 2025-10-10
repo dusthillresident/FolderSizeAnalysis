@@ -1,8 +1,24 @@
 #!/usr/bin/env tclsh
-#  _______________________________________________________________________
-# |                                                                       |
-# | File system usage visualiser, Apr 2024, by dusthillresident@gmail.com |
-# |_______________________________________________________________________|
+#  ____________________________________________________________________________
+# |                                                                            |
+# | "Folder Size Analysis", Apr 2024 - Oct 2025, by dusthillresident@gmail.com |
+# |____________________________________________________________________________|
+
+# Some hacks that enable compatibility with Tcl 8.5
+if {$tcl_version eq {8.5}} {
+ rename string _string
+ proc string {args} {
+  if { [lindex $args 0] eq {cat} } {
+   set result {}
+   foreach i [lrange $args 1 end] {
+    append result $i
+   }
+   return $result
+  } else {
+   _string {*}$args
+  }
+ }
+}
 
 package require Tk
 set dndEnabled 0
@@ -30,7 +46,7 @@ if {[tk windowingsystem] eq {aqua}} {
 #	| Application icon |
 #	o------------------o
 
-
+catch {
 set icon {iVBORw0KGgoAAAANSUhEUgAAAEAAAABABAMAAABYR2ztAAAACXBIWXMAAC4jAAAuI
 wF4pT92AAAAB3RJTUUH6QkeFCUTNys4ogAAABl0RVh0Q29tbWVudABDcmVhdGVkIHdpdGggR0lN
 UFeBDhcAAAAYUExURdQt7vb59REPBCenqE4t7l96W/b59fvRBklOeEoAAAACdFJOUwAAdpPNOAA
@@ -44,7 +60,7 @@ MU9QmLADllUfEq08lcAcsXH+ie82Ownn0K0cMGQIk94GAUwOf7Jx4FMMVtgrkASMKVDkrd+ESwx
 AWcds6sevoOm6K+6rr/qy+qP6gs+QaETDncZEAAAAABJRU5ErkJggg==}
 image create photo appIcon -data $icon
 wm iconphoto . appIcon
-
+}
 
 #	o-----------------------o
 #	| Key global variables. |
@@ -60,6 +76,8 @@ set searchRoot {}
 # and to call the corresponding display redraw procedure (the value itself is the name of the procedure)
 # Valid options are "Pie chart" and "Boxes"
 set viewMode "Pie chart"
+# Sorting mode. Valid options are "Unspecified", "By name", "By size"
+set sortMode "Unspecified"
 # Configuration option that toggles the inclusion of hidden files
 set includeHiddenFiles 0
 # This variable is part of a rubbish failsafe mechanism, an attempt at avoiding a situation where updateView gets called while another instance of updateView is already running.
@@ -298,9 +316,8 @@ proc getFileSize {path {weAreSearchingASubfolder 0}} {
 
 
 proc checkFolder {path} {
- global folders
- if {[info exists folders($path)]} {
-  return $folders($path)
+ if {[info exists ::folders($path)]} {
+  return $::folders($path)
  }
  # folderData structure:
  # 0: Folder path, 1: Size (number of bytes), 2: Contents (list of 'items'), 3: Parent path, 4: num total items, 5: num folders, 6: num files
@@ -321,7 +338,7 @@ proc checkFolder {path} {
  lset folderData 4 $totalItems
  lset folderData 5 $numFolders
  lset folderData 6 $numFiles
- set folders($path) $folderData
+ set ::folders($path) $folderData
  return $folderData
 }
 
@@ -356,9 +373,11 @@ button .top.up -text "Go up" -state disabled
   }
  }
 }
-# The viewMode menu, which sets the current view mode
-tk_optionMenu .top.viewmode viewMode {Pie chart} Boxes
-.top.viewmode configure -width 7
+# The viewMode menu, which sets the current view mode, and is used to specify the item sorting options
+menubutton .top.viewmode -text "View" -menu .top.viewmode.menu -borderwidth 1 -relief raised -indicatoron 1
+menu .top.viewmode.menu -tearoff 0
+.top.viewmode.menu insert end radiobutton -variable viewMode -label "Pie chart"
+.top.viewmode.menu insert end radiobutton -variable viewMode -label "Boxes"
 # When viewMode is changed, we need to update the display.
 trace add variable viewMode write {apply {{args} {uplevel "#0" $::canvasUpdateScript}}}
 #trace add variable includeHiddenFiles write {apply {{args} {uplevel "#0" $::refreshMenuCmd}}}
@@ -398,6 +417,13 @@ if { [tk windowingsystem] ne "x11" } {
   eval [bind . <ButtonPress-[expr {5-(%D<0)}]>]
  }
 }
+# Let's also add some 'Sorting' options to the viewmode menu
+.top.viewmode.menu insert 0 command -label "View mode" -state disabled -font {sans 9 italic}
+.top.viewmode.menu insert end separator
+.top.viewmode.menu insert end command -label "Item sorting" -state disabled -font {sans 9 italic}
+.top.viewmode.menu insert end radiobutton -label "Unspecified" -command updateSortMode -variable sortMode
+.top.viewmode.menu insert end radiobutton -label "By name" -command updateSortMode -variable sortMode
+.top.viewmode.menu insert end radiobutton -label "By size" -command updateSortMode -variable sortMode
 
 
 #	o----------------------------o
@@ -527,7 +553,7 @@ proc plural {n} {
 # The colours used for visual display.
 set itemOutlineColour		"dark gray"
 set itemOutlineColourBright	"white"
-set fileColour			"teal"
+set fileColour			"#008080";		# teal
 set fileColourBright		"#3E9E9E"
 set folderColour		"blue"
 set folderColourBright		"#3E3EFE"
@@ -621,6 +647,7 @@ proc boxArea {x y w h item} {
  set smallFilesWidth 0.0
  set folderData [checkFolder $itemPath]
  lassign $folderData {} folderTotalSize folderContents {} totalItems numFolders numFiles
+ if {$::sortMode ne {Unspecified}} {set folderContents [sortItems $folderContents]}
 
  set wh [expr {max( $w, $h )}]
 
@@ -675,6 +702,38 @@ proc "Boxes" {} {
 proc Boxes_wheelup {} {}
 proc Boxes_wheeldown {} {}
 
+if {$tcl_version eq {8.5}} {
+ proc "Boxes" {} {
+  foreach col {black white} x {10 11} y {11 10} {
+   .c create text $x $y -anchor w -fill $col -text "Sorry, \"Boxes\" doesn't work on Tcl 8.5"
+  }
+ }
+}
+
+
+#	o------------------------------o
+#	| Sorting of items in the view |
+#	o------------------------------o
+
+
+proc updateSortMode {} {
+ #puts "sortMode is now $::sortMode"
+ if {$::searchRoot ne {}} {
+  updateView $::viewingFolder
+ }
+}
+
+proc sortItems {items} {
+ #puts "sortItems called"
+ switch -- $::sortMode {
+  {By name} {
+   return [lsort -ascii -index 1 $items]
+  }
+  {By size} {
+   return [lsort -integer -index 2 $items]
+  }
+ } 
+}
 
 #	o------------------------------------o
 #	| The 'Pie chart' view display mode. |
@@ -711,6 +770,7 @@ proc "Pie chart" { {level 0} {sliceStart 0.0} {sliceExtent 360.0}  } {
   set folderData [checkFolder $path]
   lassign $folderData {} folderTotalSize folderContents {} totalItems numFolders numFiles
  }
+ if {$::sortMode ne {Unspecified}} {set folderContents [sortItems $folderContents]}
 
  # Calculate the x;y screen positions for the pie. We want it to be in the centre of the canvas,
  # and to leave just a little bit of space so it's not touching the edges of the canvas.
@@ -832,7 +892,6 @@ proc updateView {path} {
  # Obtain the folderData structure for this path
  set folderData [checkFolder $path ]
  lassign $folderData {} folderTotalSize folderContents {} totalItems numFolders numFiles
-
  # Call the redraw procedure for the chosen viewing mode
  $::viewMode
 
@@ -988,8 +1047,16 @@ Recognised options:
   Valid modes are:
    pie
    boxes
+ -sort (mode)
+  Set the sorting mode at startup.
+  Valid options are:
+   none
+   name
+   size
 }
+
 array set viewModes [list pie "Pie chart" boxes "Boxes"]
+array set sortModes [list none "Unspecified" name "By name" size "By size"]
 
 set startupSearchPath {}
 for {set i 0} {$i < $argc} {incr i} {
@@ -998,6 +1065,17 @@ for {set i 0} {$i < $argc} {incr i} {
    # Specify a folder to scan at startup
    incr i
    set startupSearchPath [lindex $argv $i] 
+  }
+  -sort {
+   # Specify the sorting mode to use at startup
+   incr i
+   if [catch {
+    set sortMode $sortModes([string tolower [lindex $argv $i]])
+   }] {
+    puts "-sort: Invalid sort mode '[lindex $argv $i]'"
+    puts "Valid options are:\n none\n name\n size"
+    exit
+   }
   }
   -view {
    # Specify the view mode to use at startup
@@ -1028,6 +1106,7 @@ for {set i 0} {$i < $argc} {incr i} {
   }
  }
 }
+unset viewModes sortModes
 
 initSessionAndReportError $startupSearchPath
 
