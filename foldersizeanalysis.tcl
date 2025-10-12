@@ -414,7 +414,7 @@ bind .c <ButtonPress-5> {
 }
 if { [tk windowingsystem] ne "x11" } {
  bind .c <MouseWheel> {
-  eval [bind .c <ButtonPress-[expr {5-(%D<0)}]>]
+  eval [bind .c <ButtonPress-[expr {4+(%D<0)}]>]
  }
 }
 # Let's also add some 'Sorting' options to the viewmode menu
@@ -762,7 +762,7 @@ proc "Pie chart" { {level 0} {sliceStart 0.0} {sliceExtent 360.0}  } {
  #puts "maxLevel is $maxLevel"
  if {$level == 0} {
   for {set i $maxLevel} {$i >= 0} {incr i -1} {
-   .c create image -1000 -1000 -tag [list levelMarker$i levelMarkers]
+   .c create image -1000 -1000 -tag [list LM$i levelMarkers]
   }
   upvar 1 folderContents folderContents folderTotalSize folderTotalSize path path
  } else {
@@ -772,6 +772,7 @@ proc "Pie chart" { {level 0} {sliceStart 0.0} {sliceExtent 360.0}  } {
  }
  if {$::sortMode ne {Unspecified}} {set folderContents [sortItems $folderContents]}
 
+ set thisLevelMarker LM$level
  # Calculate the x;y screen positions for the pie. We want it to be in the centre of the canvas,
  # and to leave just a little bit of space so it's not touching the edges of the canvas.
  set WH [expr { min( [winfo width .c], [winfo height .c] )-9 }]
@@ -818,7 +819,7 @@ proc "Pie chart" { {level 0} {sliceStart 0.0} {sliceExtent 360.0}  } {
    -fill [lindex $::itemColours $thisItemIsAFolder] \
    -activefill [lindex $::itemColoursBright $thisItemIsAFolder] \
    -width 1]
-  .c raise $thisSliceItem levelMarker$level
+  .c raise $thisSliceItem $thisLevelMarker
   # Mouse hover binding for pie slices
   .c bind $thisSliceItem <Enter> [list setStatus "[sizeString $itemSize] : [lindex [file split $itemPath] end]"]
   .c bind $thisSliceItem <Leave> {setStatus $::totalSizeMessage}
@@ -848,7 +849,7 @@ proc "Pie chart" { {level 0} {sliceStart 0.0} {sliceExtent 360.0}  } {
    -fill $::smallFilesColour \
    -activefill $::smallFilesColourBright \
    -width 1]
-  .c raise $thisSliceItem levelMarker$level
+  .c raise $thisSliceItem $thisLevelMarker
   # Mouse hover binding for smaller files pie slice
   .c bind $thisSliceItem <Enter> [list setStatus "[sizeString $smallFilesSize] : $smallFilesNumber smaller files"]
   .c bind $thisSliceItem <Leave> {setStatus $::totalSizeMessage}
